@@ -1,0 +1,13 @@
+LICENSE
+README.md
+pyproject.toml
+src/no_nepali_profanity/__init__.py
+src/no_nepali_profanity/core.py
+src/no_nepali_profanity/lexicon.py
+src/no_nepali_profanity/py.typed
+src/no_nepali_profanity.egg-info/PKG-INFO
+src/no_nepali_profanity.egg-info/SOURCES.txt
+src/no_nepali_profanity.egg-info/dependency_links.txt
+src/no_nepali_profanity.egg-info/requires.txt
+src/no_nepali_profanity.egg-info/top_level.txt
+tests/test_profanity.py

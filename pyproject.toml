@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "no-nepali-profanity"
+version = "0.1.0"
+description = "Profanity matcher for English, Romanized Nepali and Devanagari Nepali: leetspeak, stretched and spelled-out letters, Nepali postpositions, with care not to block real names."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13"
+authors = [{ name = "PG-Momik" }]
+keywords = [
+    "profanity",
+    "filter",
+    "nepali",
+    "devanagari",
+    "moderation",
+    "bad-words",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+no_nepali_profanity = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
