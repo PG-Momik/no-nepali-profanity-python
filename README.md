@@ -5,7 +5,10 @@ plus the Hindi slang common in Nepal. Built for moderating user-written text —
 sites, where false positives on real names are more damaging than a missed swear.
 
 Zero runtime dependencies. Python ≥ 3.9. A direct port of the
-[no-nepali-profanity](https://mukhxadnahunna.com/js/) npm package.
+[no-nepali-profanity](https://github.com/PG-Momik/no-nepali-profanity) npm package, with the same word lists and
+matching rules.
+
+**Documentation: [mukhxadnahunna.com/python](https://mukhxadnahunna.com/python/)**
 
 ## Install
 
