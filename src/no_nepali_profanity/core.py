@@ -28,9 +28,6 @@ MIN_COLLAPSE = 4
 _DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
 _ZERO_WIDTH_RE = re.compile(r"[\u200B-\u200D\u2060\uFEFF]")
 
-# Matches the character classes used in the reference TypeScript implementation:
-#   /[.*+?^${}()|[\]\\]/g  for escaping regex text, and
-#   /[*+?^${}()|[\]\\]/g  for building wildcard tokens.
 _RE_SPECIAL = set(".*+?^${}()|[]\\")
 _RE_WILDCARD_SPECIAL = set("*+?^${}()|[]\\")
 
@@ -140,7 +137,6 @@ def _escape_regex(s: str) -> str:
     return "".join("\\" + c if c in _RE_SPECIAL else c for c in s)
 
 
-# Turns a token into an anchored regex where each "*" stands for one hidden letter.
 def _wildcard_regex(s: str) -> re.Pattern:
     parts = []
     for c in s:
@@ -215,7 +211,10 @@ def _wildcard_token_matches(tables: Tables, token: str) -> bool:
     if not any(_is_letter(c) for c in clean_token):
         return False
 
-    forms = [squeeze(clean_token), collapse(clean_token)]
+    # "*" on both ends is markdown emphasis ("*sh*t*"). On one end only, it may also hide a first or last letter ("*ss").
+    emphasis = token.startswith("*") and token.endswith("*")
+    tokens = [clean_token] if emphasis or clean_token == token else [clean_token, token]
+    forms = [form for t in tokens for form in (squeeze(t), collapse(t))]
 
     for f in forms:
         regex = _wildcard_regex(f)
@@ -362,8 +361,6 @@ def _by_position(matches: List[ProfanityMatch]) -> List[ProfanityMatch]:
     return sorted(matches, key=lambda m: (m.start, -m.end))
 
 
-# Devanagari and the other Indic scripts this matcher deals with: a consonant following a virama
-# joins the previous cluster, so "मुर्ख" and "राण्डी" censor as two visible characters each.
 _INDIC_VIRAMAS = frozenset(
     "\u094d\u09cd\u0a4d\u0acd\u0b4d\u0bcd\u0c4d\u0ccd\u0d4d\u0dca"
 )
@@ -372,13 +369,21 @@ _INDIC_VIRAMAS = frozenset(
 def _graphemes(s: str) -> List[str]:
     clusters: List[str] = []
     for ch in s:
-        if clusters:
-            last = clusters[-1][-1]
-            if _is_grapheme_extend(ch) or (last in _INDIC_VIRAMAS and ch.isalpha()):
-                clusters[-1] += ch
-                continue
+        if clusters and (_is_grapheme_extend(ch) or (ch.isalpha() and _ends_with_virama(clusters[-1]))):
+            clusters[-1] += ch
+            continue
         clusters.append(ch)
     return clusters
+
+
+def _ends_with_virama(cluster: str) -> bool:
+    """Whether a consonant joins this cluster: it ends in a virama, perhaps followed by other marks or a ZWJ."""
+    for c in reversed(cluster):
+        if c in _INDIC_VIRAMAS:
+            return True
+        if c != "\u200d" and unicodedata.category(c) != "Mn":
+            return False
+    return False
 
 
 def _is_grapheme_extend(ch: str) -> bool:

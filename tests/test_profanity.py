@@ -40,6 +40,7 @@ class TestContainsProfanity:
             ("exact word, not a long place name", "look at that gand"),
             ("stem catches the -ne inflected form", "chodne manche"),
             ("Devanagari invective", "मुर्ख"),
+            ("Devanagari with a doubled consonant", "थुक्क"),
             ("Devanagari slang", "कमिना"),
             ("Devanagari vulgar term", "लुंड"),
             ("multi-word phrase", "chaak ko pwal"),
@@ -53,19 +54,12 @@ class TestContainsProfanity:
             ("Latin phrase from words.csv", "khatako choro"),
             ("Devanagari phrase from words.csv", "राण्डीको बान"),
             ("spelling variant with -ey", "yo khatey payment app kahiley chaley po"),
+            ("dodging with a wildcard for the hidden first letter", "that *ss"),
+            ("dodging with a wildcard for the hidden last letter", "fuc* off"),
         ],
     )
     def test_catches(self, label, text):
         assert contains_profanity(text) is True
-
-    @pytest.mark.xfail(
-        reason=(
-            "Wildcard for a hidden first letter (\"that *ss\") isn't caught — ported as-is from the npm package; "
-            "see the upstream README's Known issues."
-        )
-    )
-    def test_wildcard_for_hidden_first_letter(self):
-        assert contains_profanity("that *ss") is True
 
     @pytest.mark.parametrize(
         "text",
@@ -88,6 +82,9 @@ class TestContainsProfanity:
             "No way! That can't be right",
             "the starred items are on page 12*",
             "feed ** me ** the list",
+            "this *is* good",
+            "*and* then",
+            "**hi** there",
             "chicken biryani is good",
             "the salaam greeting sounded nice",
             "Gandaki river is in Nepal",
@@ -210,6 +207,10 @@ class TestCensor:
 
     def test_masks_devanagari_by_visible_character(self):
         assert censor("मुजीको कक्षा") == "*** कक्षा"
+
+    def test_masks_a_devanagari_conjunct_as_one_character(self):
+        assert censor("गाण्ड") == "**"
+        assert censor("कुत्ता") == "**"
 
     def test_keeps_spaces_inside_a_phrase(self):
         assert censor("sasto   manche") == "*****   ******"

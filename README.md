@@ -4,7 +4,7 @@ A small, **dependency-free** profanity matcher for **English**, **Romanized (Lat
 plus the Hindi slang common in Nepal. Built for moderating user-written text — names, comments, reviews — on Nepali
 sites, where false positives on real names are more damaging than a missed swear.
 
-Zero runtime dependencies. Python ≥ 3.13 (uses `re` Unicode property escapes). A direct port of the
+Zero runtime dependencies. Python ≥ 3.9. A direct port of the
 [no-nepali-profanity](https://mukhxadnahunna.com/js/) npm package.
 
 ## Install
@@ -27,7 +27,7 @@ contains_profanity("मुजीको कक्षा")           # True  (Deva
 find_profanity("f.u.c.k this sh1t")        # ["fuck", "shit"]
 find_profanity("f u c k this")              # ["fuck"]
 find_profanity("Randip Thapa")              # []
-find_profanity("*ss teacher")               # []          ⚠️ not yet caught — see Known issues
+find_profanity("*ss teacher")               # ["*ss"]
 
 # debugging — see what the matcher actually splits into
 tokenize("Great teacher!")                  # ["great", "teacher"]
@@ -101,11 +101,6 @@ find_profanity("terms and conditions", {"strictness": "strict"})   # ["condition
 - **No caste names, surnames or ordinary words that are only offensive in context** (e.g. *kami*, *kukur*). A word
   list can't tell a slur from someone's name; that needs human moderation.
 - **No judgement of context, sarcasm or meaning.** This is a first-pass filter, not a moderator.
-
-## Known issues
-
-- **A wildcard for a hidden first letter isn't caught.** `*ss` (`ass` with a hidden first letter) returns `[]`.
-  (A real gap in the matcher, ported as-is from the npm package.)
 
 ## Development
 

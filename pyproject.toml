@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Profanity matcher for English, Romanized Nepali and Devanagari Nepali: leetspeak, stretched and spelled-out letters, Nepali postpositions, with care not to block real names."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.13"
+requires-python = ">=3.9"
 authors = [{ name = "PG-Momik" }]
 keywords = [
     "profanity",
@@ -23,10 +23,19 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Text Processing :: Linguistic",
 ]
+
+[project.urls]
+Homepage = "https://mukhxadnahunna.com/python/"
+Source = "https://github.com/PG-Momik/no-nepali-profanity-python"
+Issues = "https://github.com/PG-Momik/no-nepali-profanity/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
