@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 from .lexicon import (
+    ALLOWED,
     DEVANAGARI_SUFFIXES,
+    INFIXES,
     LATIN_SUFFIXES,
     LANGUAGES,
     PHRASES,
@@ -20,7 +22,14 @@ LANGUAGES_CHECKED: Tuple[str, ...] = LANGUAGES
 STRICTNESS_LEVEL: Dict[str, int] = {"lenient": 0, "standard": 1, "strict": 2}
 
 LEET: Dict[str, str] = {
-    "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s",
+    "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "9": "g", "@": "a", "$": "s", "€": "e",
+}
+
+# Cyrillic and Greek letters that look like Latin ones, so "fuсk" with a Cyrillic с still reads as "fuck".
+CONFUSABLES: Dict[str, str] = {
+    "а": "a", "в": "b", "е": "e", "ё": "e", "к": "k", "м": "m", "н": "h", "о": "o", "р": "p", "с": "c", "т": "t",
+    "у": "y", "х": "x", "ѕ": "s", "і": "i", "ї": "i", "ј": "j", "ԁ": "d", "α": "a", "β": "b", "ε": "e", "ι": "i",
+    "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t", "υ": "u", "χ": "x",
 }
 
 MIN_COLLAPSE = 4
@@ -62,6 +71,15 @@ def squeeze(s: str) -> str:
     return re.sub(r"(.)\1{2,}", r"\1\1", s)
 
 
+def romanize(s: str) -> str:
+    """Fold the spellings of छ, chh and x, into x.
+
+    Romanized entries and tokens are both folded before they're compared, so xakka matches chhakka. It also keeps
+    छ apart from च once letters are collapsed, so chhod ("leave") no longer matches the stem chod.
+    """
+    return squeeze(s).replace("chh", "x")
+
+
 def _normalize_char(ch: str) -> str:
     if _ZERO_WIDTH_RE.fullmatch(ch):
         return ""
@@ -71,8 +89,9 @@ def _normalize_char(ch: str) -> str:
         decomposed = decomposed.replace("\u093c", "")
         decomposed = decomposed.replace("\u0901", "\u0902")
         return decomposed
-    folded = unicodedata.normalize("NFKC", ch).lower()
-    return "".join(LEET.get(c, c) for c in folded)
+    # Accents are removed, so "fück" reads as "fuck".
+    folded = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", ch).lower())
+    return "".join(LEET.get(c, CONFUSABLES.get(c, c)) for c in folded if not _is_mark(c))
 
 
 @dataclass
@@ -153,21 +172,40 @@ def _wildcard_regex(s: str) -> re.Pattern:
 class Tables:
     latin_exact: set
     latin_collapsed: set
-    latin_words: List[str]
     latin_stems: List[str]
+    roman_exact: set
+    roman_collapsed: set
+    roman_stems: List[str]
+    # Every Latin word and stem, unfolded, for wildcard tokens.
+    wild_words: List[str]
+    wild_stems: List[str]
+    infixes: List[str]
+    # The infixes with no doubled letter, which are also looked for in the collapsed token.
+    plain_infixes: List[str]
+    allowed: set
     dev_words: set
     dev_stems: List[str]
+    dev_allowed: set
     phrases: List[str]
     phrase_patterns: List[re.Pattern]
 
 
-def _active(entries: Tuple[LexiconEntry, ...], devanagari: bool, languages: set, level: int) -> List[str]:
-    out = []
-    for e in entries:
-        if e.language in languages and STRICTNESS_LEVEL[e.strictness] <= level:
-            if (e.language == "devanagari") == devanagari:
-                out.append(normalize_text(e.text))
-    return out
+def _active(entries: Tuple[LexiconEntry, ...], language: str, languages: set, level: int) -> List[str]:
+    if language not in languages:
+        return []
+    return [
+        normalize_text(e.text)
+        for e in entries
+        if e.language == language and STRICTNESS_LEVEL[e.strictness] <= level
+    ]
+
+
+def _string_list(value, name: str) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str) or not all(isinstance(w, str) for w in value):
+        raise TypeError(f"{name} must be a list of strings.")
+    return [w.strip() for w in value if w.strip()]
 
 
 def _phrase_whitespace_regex(phrase: str) -> re.Pattern:
@@ -186,18 +224,34 @@ def build_tables(options: Optional[Dict] = None) -> Tables:
     if level is None:
         raise TypeError(f'Unknown strictness "{strictness}". Use one of: {", ".join(STRICTNESS_LEVELS)}.')
 
-    latin_words = _active(WORDS, False, languages, level)
-    latin_stems = [collapse(s) for s in _active(STEMS, False, languages, level)]
+    extra_words = [normalize_text(w) for w in _string_list(options.get("extra_words"), "extra_words")]
+    allow_words = [normalize_text(w) for w in [*ALLOWED, *_string_list(options.get("allow_words"), "allow_words")]]
 
-    phrases = [*_active(PHRASES, False, languages, level), *_active(PHRASES, True, languages, level)]
+    # Extra words count as English: matched as they are, without the Romanized spelling folds.
+    english_words = [*_active(WORDS, "english", languages, level), *(w for w in extra_words if not is_devanagari(w))]
+    roman_words_raw = _active(WORDS, "romanized", languages, level)
+    roman_words = [romanize(w) for w in roman_words_raw]
+    english_stems = _active(STEMS, "english", languages, level)
+    roman_stems = _active(STEMS, "romanized", languages, level)
+    infixes = [squeeze(i) for i in _active(INFIXES, "english", languages, level)]
+
+    phrases = [p for lang in LANGUAGES_CHECKED for p in _active(PHRASES, lang, languages, level)]
 
     return Tables(
-        latin_exact=set(squeeze(w) for w in latin_words),
-        latin_collapsed=set(collapse(w) for w in latin_words if len(collapse(w)) >= MIN_COLLAPSE),
-        latin_words=[squeeze(w) for w in latin_words],
-        latin_stems=latin_stems,
-        dev_words=set(_active(WORDS, True, languages, level)),
-        dev_stems=_active(STEMS, True, languages, level),
+        latin_exact=set(squeeze(w) for w in english_words),
+        latin_collapsed=set(collapse(w) for w in english_words if len(collapse(w)) >= MIN_COLLAPSE),
+        latin_stems=[collapse(s) for s in english_stems],
+        roman_exact=set(roman_words),
+        roman_collapsed=set(collapse(w) for w in roman_words if len(collapse(w)) >= MIN_COLLAPSE),
+        roman_stems=[collapse(romanize(s)) for s in roman_stems],
+        wild_words=[squeeze(w) for w in [*english_words, *roman_words_raw]],
+        wild_stems=[collapse(s) for s in [*english_stems, *roman_stems]],
+        infixes=infixes,
+        plain_infixes=[i for i in infixes if collapse(i) == i],
+        allowed=set(squeeze(w) for w in allow_words if not is_devanagari(w)),
+        dev_words=set([*_active(WORDS, "devanagari", languages, level), *(w for w in extra_words if is_devanagari(w))]),
+        dev_stems=_active(STEMS, "devanagari", languages, level),
+        dev_allowed=set(w for w in allow_words if is_devanagari(w)),
         phrases=phrases,
         phrase_patterns=[_phrase_whitespace_regex(p) for p in phrases],
     )
@@ -218,9 +272,9 @@ def _wildcard_token_matches(tables: Tables, token: str) -> bool:
 
     for f in forms:
         regex = _wildcard_regex(f)
-        if any(regex.fullmatch(w) for w in tables.latin_words):
+        if any(regex.fullmatch(w) for w in tables.wild_words):
             return True
-        for stem in tables.latin_stems:
+        for stem in tables.wild_stems:
             if len(f) < len(stem):
                 continue
             if _wildcard_regex(f[: len(stem)]).fullmatch(stem):
@@ -235,13 +289,23 @@ def _latin_token_matches(tables: Tables, token: str) -> bool:
             candidates.append(token[: -len(s)])
             break
 
+    if any(squeeze(t) in tables.allowed for t in candidates):
+        return False
+
     for t in candidates:
         squeezed = squeeze(t)
         collapsed = collapse(t)
+        roman = romanize(t)
+        roman_collapsed = collapse(roman)
         if (
             squeezed in tables.latin_exact
             or (len(collapsed) >= MIN_COLLAPSE and collapsed in tables.latin_collapsed)
             or any(collapsed.startswith(stem) for stem in tables.latin_stems)
+            or roman in tables.roman_exact
+            or (len(roman_collapsed) >= MIN_COLLAPSE and roman_collapsed in tables.roman_collapsed)
+            or any(roman_collapsed.startswith(stem) for stem in tables.roman_stems)
+            or any(i in squeezed for i in tables.infixes)
+            or any(i in collapsed for i in tables.plain_infixes)
             or _wildcard_token_matches(tables, t)
         ):
             return True
@@ -255,6 +319,8 @@ def _devanagari_token_matches(tables: Tables, token: str) -> bool:
             candidates.append(token[: -len(s)])
             break
 
+    if any(t in tables.dev_allowed for t in candidates):
+        return False
     return any(t in tables.dev_words or any(t.startswith(stem) for stem in tables.dev_stems) for t in candidates)
 
 
@@ -305,6 +371,57 @@ def _token_spans(n: Normalized) -> List[Span]:
     return tokens
 
 
+# Characters that can split a word without a space: "sh.it", "fu-ck", "b_i_tch".
+_GLUE_RE = re.compile(r"[._\-~'`]+")
+MAX_GLUED_PIECES = 6
+MAX_GLUED_LENGTH = 12
+
+
+def _is_token_char(ch: str) -> bool:
+    return _is_letter(ch) or _is_mark(ch) or ch == "*"
+
+
+def _glued_spans(n: Normalized) -> List[Span]:
+    """Runs of Latin letters split only by glue characters, read as one word.
+
+    A run is joined only if one of its pieces is three letters or fewer and the joined word is at most 12 letters,
+    so "shital.shrestha" in an email address stays two words.
+    """
+    text = n.text
+    runs: List[Tuple[str, int, int]] = []
+    i = 0
+    while i < len(text):
+        if _is_token_char(text[i]):
+            j = i
+            while j < len(text) and _is_token_char(text[j]):
+                j += 1
+            if not is_devanagari(text[i:j]):
+                runs.append((text[i:j], i, j))
+            i = j
+        else:
+            i += 1
+
+    spans: List[Span] = []
+    group: List[Tuple[str, int, int]] = []
+
+    def flush() -> None:
+        length = sum(len(r[0]) for r in group)
+        if (
+            2 <= len(group) <= MAX_GLUED_PIECES
+            and length <= MAX_GLUED_LENGTH
+            and any(len(r[0]) <= 3 for r in group)
+        ):
+            spans.append(Span("".join(r[0] for r in group), n.starts[group[0][1]], n.ends[group[-1][2] - 1]))
+        group.clear()
+
+    for r in runs:
+        if group and not _GLUE_RE.fullmatch(text[group[-1][2] : r[1]]):
+            flush()
+        group.append(r)
+    flush()
+    return spans
+
+
 def tokenize(text: str) -> List[str]:
     """The raw tokens the matcher sees. Useful for debugging why a word is (or isn't) caught."""
     if not text:
@@ -341,6 +458,13 @@ def _scan(tables: Tables, text: str) -> List[ProfanityMatch]:
         )
         if matches:
             found.append(make(t.value, t.start, t.end))
+
+    # A glued word is only read joined when none of its pieces matched on its own.
+    for g in _glued_spans(n):
+        if any(m.start < g.end and g.start < m.end for m in found):
+            continue
+        if _latin_token_matches(tables, g.value):
+            found.append(make(g.value, g.start, g.end))
 
     for index, re_pattern in enumerate(tables.phrase_patterns):
         for m in re_pattern.finditer(n.text):
@@ -489,6 +613,8 @@ def _cached_filter(options: Optional[Dict] = None) -> ProfanityFilter:
     key = (
         options.get("strictness", ""),
         tuple(sorted(options.get("languages", LANGUAGES_CHECKED))),
+        tuple(options.get("extra_words") or ()),
+        tuple(options.get("allow_words") or ()),
     )
     _filter = _filter_cache.get(key)
     if _filter is None:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "no-nepali-profanity"
-version = "0.1.0"
+version = "0.2.0"
 description = "Profanity matcher for English, Romanized Nepali and Devanagari Nepali: leetspeak, stretched and spelled-out letters, Nepali postpositions, with care not to block real names."
 readme = "README.md"
 license = "MIT"

@@ -54,6 +54,23 @@ class TestContainsProfanity:
             ("Latin phrase from words.csv", "khatako choro"),
             ("Devanagari phrase from words.csv", "राण्डीको बान"),
             ("spelling variant with -ey", "yo khatey payment app kahiley chaley po"),
+            ("an English slur", "what a faggot"),
+            ("a short English slur", "fag"),
+            ("an English slur in leetspeak", "f@ggot"),
+            ("an English compound with a stem", "shitface"),
+            ("an English compound in leetspeak with !", "sh!tf@ce"),
+            ("a root inside a longer word", "dumbfuck"),
+            ("a root inside a joined phrase", "sonofabitch"),
+            ("x written for chh", "xakka"),
+            ("x written for chh, stretched", "xaaakka"),
+            ("x written for ch", "maxikne"),
+            ("a word split by punctuation", "sh.it happens"),
+            ("a word split by a hyphen", "fu-ck off"),
+            ("a word split with one letter on its own", "f-ck off"),
+            ("accented letters", "fück"),
+            ("a Cyrillic look-alike letter", "fuсk"),
+            ("9 for g", "ni99er"),
+            ("8 for b", "8itch"),
             ("dodging with a wildcard for the hidden first letter", "that *ss"),
             ("dodging with a wildcard for the hidden last letter", "fuc* off"),
         ],
@@ -99,6 +116,35 @@ class TestContainsProfanity:
             "lato keta",
             "फोहोर पानी",
             "लाटो केटा",
+            # chh (छ) is kept apart from ch (च)
+            "chhodnu parchha",
+            "xodnu parchha",
+            "chhut paunu bhayo",
+            # Words and names on the allow list, or that only contain a listed word
+            "Shital Shrestha",
+            "Shitijko ghar",
+            "Nigeria and Niger",
+            "he sniggered",
+            "Scunthorpe United",
+            "Harshita and Nishita",
+            "shiitake mushrooms",
+            "a niggardly tip",
+            "Shiite and Sunni",
+            "a cutwater and sweetwater",
+            "the dog's muzzle",
+            "sticky goo",
+            "a looser fit",
+            "fagotto solo",
+            # Punctuation that isn't hiding a word
+            "e.g. the i.e. case",
+            "shital.shrestha@example.com",
+            "self-conscious and well-known",
+            "don't go",
+            # Ordinary words the Romanized spelling folds must not change
+            "the sale is on",
+            "good food",
+            "book a shoot",
+            "the 2026 census",
         ],
     )
     def test_does_not_flag(self, text):
@@ -149,15 +195,44 @@ class TestStrictnessOption:
         assert contains_profanity("idiot", {"strictness": "standard"}) is True
         assert contains_profanity("Randip Thapa") is False
 
-    def test_strict_adds_stems_that_hit_ordinary_words(self):
+    def test_strict_adds_stems_and_words_that_hit_ordinary_words(self):
         strict = {"strictness": "strict"}
         assert find_profanity("randikoban", strict) == ["randikoban"]
-        assert find_profanity("terms and conditions", strict) == ["conditions"]
-        assert find_profanity("Randip Thapa", strict) == ["randip"]
+        assert find_profanity("damn it", strict) == ["damn"]
+        assert find_profanity("damn it") == []
+
+    def test_strict_still_leaves_the_allow_list_alone(self):
+        strict = {"strictness": "strict"}
+        assert find_profanity("Randip Thapa", strict) == []
+        assert find_profanity("Randipko class", strict) == []
+        assert find_profanity("terms and conditions", strict) == []
+        assert find_profanity("a random conductor", strict) == []
+        assert find_profanity("Kandel sir", strict) == []
 
     def test_rejects_an_unknown_strictness(self):
         with pytest.raises(TypeError):
             create_filter({"strictness": "max"})
+
+
+class TestExtraAndAllowWords:
+    def test_flags_extra_words_with_leetspeak_and_postpositions(self):
+        f = create_filter({"extra_words": ["spammer", "ठग"]})
+        assert f.find_profanity("sp4mmer") == ["spammer"]
+        assert f.find_profanity("spammerko kura") == ["spammerko"]
+        assert f.find_profanity("ठगको") == ["ठगको"]
+        assert find_profanity("spammer ठग") == []
+
+    def test_never_flags_allowed_words(self):
+        assert find_profanity("idiot", {"allow_words": ["idiot"]}) == []
+        assert find_profanity("mujiko", {"allow_words": ["muji"]}) == []
+        assert find_profanity("मुजीको", {"allow_words": ["मुजी"]}) == []
+        assert find_profanity("idiot muji", {"allow_words": ["idiot"]}) == ["muji"]
+
+    def test_rejects_a_list_that_is_not_strings(self):
+        with pytest.raises(TypeError):
+            create_filter({"extra_words": "muji"})
+        with pytest.raises(TypeError):
+            create_filter({"allow_words": [1]})
 
 
 class TestCreateFilter:
@@ -200,6 +275,8 @@ class TestCensor:
             ("f*ck and *sh*t*", "**** and ******"),
             ("muji muji", "**** ****"),
             ("you 😀 muji 😀", "you 😀 **** 😀"),
+            ("sh.it happens", "***** happens"),
+            ("sh!tf@ce", "********"),
         ],
     )
     def test_masks(self, text, expected):
@@ -235,7 +312,7 @@ class TestCensor:
     def test_respects_the_filter_options(self):
         assert censor("fuck muji", {"languages": ["romanized"]}) == "fuck ****"
         assert censor("you idiot", {"strictness": "lenient"}) == "you idiot"
-        assert create_filter({"strictness": "strict"}).censor("Randip Thapa") == "****** Thapa"
+        assert create_filter({"strictness": "strict"}).censor("damn Randip") == "**** Randip"
 
     def test_rejects_an_empty_mask(self):
         with pytest.raises(TypeError):

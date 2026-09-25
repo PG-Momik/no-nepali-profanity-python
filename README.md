@@ -76,12 +76,14 @@ result.censor()        # "you ****"
 ```py
 find_profanity("fuck muji मुजी", {"languages": ["romanized"]})      # ["muji"]
 contains_profanity("you idiot", {"strictness": "lenient"})         # False
-find_profanity("terms and conditions", {"strictness": "strict"})   # ["conditions"]
+find_profanity("damn it", {"strictness": "strict"})   # ["damn"]
 ```
 
 - `languages`: any of `"english"`, `"romanized"`, `"devanagari"`. Default: all three.
 - `strictness`: `"lenient"` (severe words only), `"standard"` (default, adds milder insults like `idiot`, `murkha`) or
-  `"strict"` (adds the stems `rand`, `cond`, `kand`, `lund`, which also hit words like `Randip` and `conditions`).
+  `"strict"` (adds entries that are also ordinary words, like `damn`, and the stems `rand`, `cond`, `kand`, `lund`;
+  names they would hit, like `Randip`, are on a built-in allow list).
+- `extra_words`: more words to flag. `allow_words`: words never to flag, such as names on your site.
 
 ## What it catches
 
